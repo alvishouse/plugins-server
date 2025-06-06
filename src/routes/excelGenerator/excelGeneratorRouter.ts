@@ -19,7 +19,7 @@ export const excelGeneratorRegistry = new OpenAPIRegistry();
 excelGeneratorRegistry.register('ExcelGenerator', ExcelGeneratorResponseSchema);
 excelGeneratorRegistry.registerPath({
   method: 'post',
-  path: '/excel-generator/generate',
+  path: '/generate', // correct relative path
   tags: ['Excel Generator'],
   request: {
     body: createApiRequestBody(ExcelGeneratorRequestBodySchema, 'application/json'),
