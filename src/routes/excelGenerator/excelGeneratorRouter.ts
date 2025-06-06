@@ -10,7 +10,6 @@ import { createApiRequestBody } from '@/api-docs/openAPIRequestBuilders';
 import { createApiResponse } from '@/api-docs/openAPIResponseBuilders';
 import { ResponseStatus, ServiceResponse } from '@/common/models/serviceResponse';
 import { handleServiceResponse } from '@/common/utils/httpHandlers';
-
 import { ExcelGeneratorRequestBodySchema, ExcelGeneratorResponseSchema } from './excelGeneratorModel';
 
 export const COMPRESS = true;
@@ -19,7 +18,7 @@ export const excelGeneratorRegistry = new OpenAPIRegistry();
 excelGeneratorRegistry.register('ExcelGenerator', ExcelGeneratorResponseSchema);
 excelGeneratorRegistry.registerPath({
   method: 'post',
-  path: '/generate', // correct relative path
+  path: '/generate',
   tags: ['Excel Generator'],
   request: {
     body: createApiRequestBody(ExcelGeneratorRequestBodySchema, 'application/json'),
@@ -27,14 +26,12 @@ excelGeneratorRegistry.registerPath({
   responses: createApiResponse(ExcelGeneratorResponseSchema, 'Success'),
 });
 
-// Create folder to contains generated files
 const exportsDir = path.join(__dirname, '../../..', 'excel-exports');
 
 if (!fs.existsSync(exportsDir)) {
   fs.mkdirSync(exportsDir, { recursive: true });
 }
 
-// Cron job to delete files older than 1 hour
 cron.schedule('0 * * * *', () => {
   const now = Date.now();
   const oneHour = 60 * 60 * 1000;
@@ -53,6 +50,17 @@ cron.schedule('0 * * * *', () => {
 });
 
 const serverUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
+
+const DEFAULT_EXCEL_CONFIGS = {
+  fontFamily: 'Calibri',
+  tableTitleFontSize: 13,
+  headerFontSize: 11,
+  fontSize: 11,
+  autoFitColumnWidth: true,
+  autoFilter: false,
+  wrapText: false,
+  borderStyle: null,
+};
 
 function columnLetterToNumber(letter: string): number {
   let column = 0;
@@ -205,54 +213,52 @@ export function execGenExcelFuncs(sheetsData: any[], excelConfigs: any): string 
   return fileName;
 }
 
-export const excelGeneratorRouter: Router = (() => {
-  const router = express.Router();
+const router = express.Router();
 
-  router.use('/downloads', express.static(exportsDir));
+router.use('/downloads', express.static(exportsDir));
 
-  router.post('/generate', async (_req: Request, res: Response) => {
-    const { sheetsData, excelConfigs } = _req.body;
+router.post('/generate', async (_req: Request, res: Response) => {
+  const { sheetsData, excelConfigs } = _req.body;
 
-    if (!sheetsData || !sheetsData.length) {
-      const errorRes = new ServiceResponse(
-        ResponseStatus.Failed,
-        '[Validation Error] Sheets data is required!',
-        'Please make sure you have sent the excel sheets content generated from TypingMind.',
-        StatusCodes.BAD_REQUEST
-      );
-      return handleServiceResponse(errorRes, res);
-    }
+  if (!sheetsData || !sheetsData.length) {
+    const errorRes = new ServiceResponse(
+      ResponseStatus.Failed,
+      '[Validation Error] Sheets data is required!',
+      'Please make sure you have sent the excel sheets content generated from TypingMind.',
+      StatusCodes.BAD_REQUEST
+    );
+    return handleServiceResponse(errorRes, res);
+  }
 
-    try {
-      const fileName = execGenExcelFuncs(sheetsData, {
-        fontFamily: excelConfigs.fontFamily ?? DEFAULT_EXCEL_CONFIGS.fontFamily,
-        tableTitleFontSize: excelConfigs.titleFontSize ?? DEFAULT_EXCEL_CONFIGS.tableTitleFontSize,
-        headerFontSize: excelConfigs.headerFontSize ?? DEFAULT_EXCEL_CONFIGS.headerFontSize,
-        fontSize: excelConfigs.fontSize ?? DEFAULT_EXCEL_CONFIGS.fontSize,
-        autoFilter: excelConfigs.autoFilter ?? DEFAULT_EXCEL_CONFIGS.autoFilter,
-        borderStyle: excelConfigs.borderStyle || DEFAULT_EXCEL_CONFIGS.borderStyle,
-        wrapText: excelConfigs.wrapText ?? DEFAULT_EXCEL_CONFIGS.wrapText,
-        autoFitColumnWidth: excelConfigs.autoFitColumnWidth ?? DEFAULT_EXCEL_CONFIGS.autoFitColumnWidth,
-      });
+  try {
+    const fileName = execGenExcelFuncs(sheetsData, {
+      fontFamily: excelConfigs.fontFamily ?? DEFAULT_EXCEL_CONFIGS.fontFamily,
+      tableTitleFontSize: excelConfigs.titleFontSize ?? DEFAULT_EXCEL_CONFIGS.tableTitleFontSize,
+      headerFontSize: excelConfigs.headerFontSize ?? DEFAULT_EXCEL_CONFIGS.headerFontSize,
+      fontSize: excelConfigs.fontSize ?? DEFAULT_EXCEL_CONFIGS.fontSize,
+      autoFilter: excelConfigs.autoFilter ?? DEFAULT_EXCEL_CONFIGS.autoFilter,
+      borderStyle: excelConfigs.borderStyle ?? DEFAULT_EXCEL_CONFIGS.borderStyle,
+      wrapText: excelConfigs.wrapText ?? DEFAULT_EXCEL_CONFIGS.wrapText,
+      autoFitColumnWidth: excelConfigs.autoFitColumnWidth ?? DEFAULT_EXCEL_CONFIGS.autoFitColumnWidth,
+    });
 
-      const successRes = new ServiceResponse(
-        ResponseStatus.Success,
-        'File generated successfully',
-        { downloadUrl: `${serverUrl}/excel-generator/downloads/${fileName}` },
-        StatusCodes.OK
-      );
-      return handleServiceResponse(successRes, res);
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-      const errorRes = new ServiceResponse(
-        ResponseStatus.Failed,
-        `Error ${errorMessage}`,
-        'Sorry, we couldn’t generate the Excel file.',
-        StatusCodes.INTERNAL_SERVER_ERROR
-      );
-      return handleServiceResponse(errorRes, res);
-    }
-  });
+    const successRes = new ServiceResponse(
+      ResponseStatus.Success,
+      'File generated successfully',
+      { downloadUrl: `${serverUrl}/excel-generator/downloads/${fileName}` },
+      StatusCodes.OK
+    );
+    return handleServiceResponse(successRes, res);
+  } catch (error) {
+    const errorMessage = (error as Error).message;
+    const errorRes = new ServiceResponse(
+      ResponseStatus.Failed,
+      `Error ${errorMessage}`,
+      'Sorry, we couldn’t generate the Excel file.',
+      StatusCodes.INTERNAL_SERVER_ERROR
+    );
+    return handleServiceResponse(errorRes, res);
+  }
+});
 
-  return router;
-})();
+export const excelGeneratorRouter = router;
